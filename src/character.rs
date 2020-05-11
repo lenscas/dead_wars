@@ -1,13 +1,31 @@
 use crate::{grid::ParseableMap, grid_pos_to_rectangle, Wrapper};
-use quicksilver::{graphics::Color, mint::Vector2, Result};
+use quicksilver::{geom::Vector, graphics::Color, mint::Vector2, Result};
+use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
+#[derive(Deserialize, Clone, Copy)]
+pub enum CharacterType {
+    Basic,
+}
+impl CharacterType {
+    pub fn get_range(&self) -> i32 {
+        match self {
+            CharacterType::Basic => 2,
+        }
+    }
+}
+
 pub struct Character {
     pub position: Vector2<i32>,
     pub id: u64,
+    pub char_type: CharacterType,
 }
 impl Character {
-    pub fn new(id: u64, position: Vector2<i32>) -> Self {
-        Self { position, id }
+    pub fn new(id: u64, position: Vector2<i32>, char_type: CharacterType) -> Self {
+        Self {
+            position,
+            id,
+            char_type,
+        }
     }
     pub fn draw(&self, wrapper: &mut Wrapper<'_>) -> Result<()> {
         wrapper
@@ -27,19 +45,42 @@ impl CharacterContainer {
         let mut next_id = 0;
 
         let mut characters = HashMap::new();
-        for char_loc in &map.characters {
-            characters.insert(
-                next_id,
-                Character::new(next_id, Vector2::<i32>::from(*char_loc)),
-            );
+        for character in &map.characters {
+            let loc = [character.x, character.y].into();
+            characters.insert(next_id, Character::new(next_id, loc, character.char_type));
             next_id += 1
         }
         Self {
             characters,
-            next_id: next_id,
+            next_id,
             path: None,
         }
     }
+
+    pub fn get_char_ids_in_range_of(&self, id: u64) -> Vec<(u64, Vector2<i32>)> {
+        let res = self
+            .characters
+            .get(&id)
+            .map(|v| (v.position, v.char_type.get_range()));
+        if let Some((position, range)) = res {
+            let pos_as_vec = Vector::new(position.x, position.y);
+            self.characters
+                .iter()
+                .map(|(id, character)| (*id, character))
+                .filter(|(check_id, character)| {
+                    id != *check_id
+                        && (Vector::new(character.position.x, character.position.y)
+                            .distance(pos_as_vec)
+                            .ceil()
+                            < (range as f32))
+                })
+                .map(|(id, character)| (id, character.position))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn get_char_id_by_pos(&self, position: Vector2<i32>) -> Option<u64> {
         self.characters
             .iter()
@@ -62,7 +103,8 @@ impl CharacterContainer {
         }
         Ok(())
     }
-    pub fn update(&mut self) -> Result<()> {
+
+    pub fn update(&mut self) -> Result<bool> {
         if let Some((id, path)) = &mut self.path {
             let next = path.pop_front();
             if let Some(next) = next {
@@ -71,10 +113,13 @@ impl CharacterContainer {
                     .get_mut(id)
                     .expect(&format!("id not valid? {}", id));
                 char.position = next;
+                Ok(false)
             } else {
                 self.path = None;
+                Ok(true)
             }
+        } else {
+            Ok(false)
         }
-        Ok(())
     }
 }

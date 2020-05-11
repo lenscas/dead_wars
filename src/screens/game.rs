@@ -1,8 +1,8 @@
 use super::screen::Screen;
 use crate::{
-    character::{Character, CharacterContainer},
+    character::CharacterContainer,
     grid::{Grid, ParseableMap, TILE_SIZE},
-    Wrapper,
+    grid_pos_to_rectangle, Wrapper,
 };
 use async_trait::async_trait;
 use quicksilver::{
@@ -12,10 +12,7 @@ use quicksilver::{
     load_file,
     mint::Vector2,
 };
-use std::{
-    collections::{HashMap, HashSet},
-    convert::TryFrom,
-};
+use std::{collections::HashSet, convert::TryFrom};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Directions {
@@ -59,12 +56,37 @@ impl TryFrom<Key> for Directions {
         }
     }
 }
+pub enum InputState {
+    Normal,
+    DrawingPath(u64, Vec<Vector2<i32>>),
+    WaitingForFight(u64, Vector2<i32>),
+    SelectingFight(u64, Vector2<i32>, Vec<(u64, Vector2<i32>)>),
+}
+
+impl InputState {
+    pub fn to_waiting_for_fight(&mut self) -> Result<(u64, Vec<Vector2<i32>>), ()> {
+        match self {
+            InputState::DrawingPath(id, path) => {
+                let id = *id;
+                let last_place = path.last().unwrap().clone();
+                drop(path);
+                let old = std::mem::replace(self, InputState::WaitingForFight(id, last_place));
+                if let InputState::DrawingPath(id, path) = old {
+                    Ok((id, path))
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => Err(()),
+        }
+    }
+}
 
 pub struct Game {
     pub moving: HashSet<Directions>,
     pub translate: Vector,
     pub grid: Grid,
-    pub selected: Option<(u64, Vec<Vector2<i32>>)>,
+    pub selected: InputState, //Option<(u64, Vec<Vector2<i32>>)>,
     pub characters: CharacterContainer,
 }
 
@@ -82,7 +104,7 @@ impl Game {
             translate: Vector::new(0, 0),
             grid,
             characters,
-            selected: None,
+            selected: InputState::Normal,
         }
     }
 }
@@ -102,8 +124,8 @@ impl Game {
 impl Screen for Game {
     async fn draw(&mut self, wrapper: &mut crate::Wrapper<'_>) -> quicksilver::Result<()> {
         self.grid.draw(wrapper);
-        if let Some(selected) = &self.selected {
-            for v in &selected.1 {
+        if let InputState::DrawingPath(_, path) = &self.selected {
+            for v in path {
                 wrapper.gfx.fill_rect(
                     &Rectangle::new(
                         Vector::new(v.x * TILE_SIZE, v.y * TILE_SIZE),
@@ -114,6 +136,14 @@ impl Screen for Game {
             }
         }
         self.characters.draw(wrapper)?;
+        if let InputState::SelectingFight(_, _, targets) = &self.selected {
+            for (_, target) in targets {
+                wrapper
+                    .gfx
+                    .fill_rect(&grid_pos_to_rectangle(target.clone()), Color::ORANGE);
+            }
+        }
+
         Ok(())
     }
     async fn update(
@@ -132,13 +162,19 @@ impl Screen for Game {
         }
         if self.translate != translate {
             let cursor_pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos);
-            if let Some(selected) = &mut self.selected {
-                selected.1.push(cursor_pos);
+            if let InputState::DrawingPath(_, path) = &mut self.selected {
+                path.push(cursor_pos);
             }
         }
         self.translate = translate;
         wrapper.gfx.set_transform(Transform::translate(translate));
-        self.characters.update()?;
+        if self.characters.update()? {
+            if let InputState::WaitingForFight(id, at) = self.selected {
+                let in_range = self.characters.get_char_ids_in_range_of(id);
+                self.selected = InputState::SelectingFight(id, at, in_range);
+            }
+        }
+
         Ok(None)
     }
     async fn event(
@@ -151,40 +187,51 @@ impl Screen for Game {
                 if x.button() == MouseButton::Left {
                     if x.is_down() {
                         match &self.selected {
-                            Some(x) => {
+                            InputState::DrawingPath(_, _) => {
                                 dbg!(x);
-                                let (id, path) = self.selected.take().unwrap();
+                                let (id, path) = self.selected.to_waiting_for_fight().unwrap();
                                 self.characters.move_character(id, path);
                             }
-                            None => {
+                            InputState::Normal => {
                                 if self.characters.is_moving() {
                                     return Ok(None);
                                 }
                                 let pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos.clone());
                                 if let Some(id) = self.characters.get_char_id_by_pos(pos) {
-                                    self.selected = Some((id, vec![pos]))
+                                    self.selected = InputState::DrawingPath(id, vec![pos])
                                 }
                             }
+                            InputState::SelectingFight(_, _, targets) => {
+                                let cursor_pos =
+                                    self.cursor_pos_to_grid(wrapper.last_cursor_pos.clone());
+                                if let Some(_) = targets
+                                    .iter()
+                                    .find(|(_, loc)| loc == &cursor_pos)
+                                    .map(|(id, _)| id)
+                                {
+                                    self.selected = InputState::Normal
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 } else if x.button() == MouseButton::Right && x.is_down() {
-                    self.selected = None;
+                    self.selected = InputState::Normal;
                 }
             }
             quicksilver::lifecycle::Event::PointerMoved(x) => {
                 let loc = x.location();
                 let grid_pos = self.cursor_pos_to_grid(loc);
-                if let Some(selected) = &mut self.selected {
-                    if selected.1.len() > 1
-                        && selected
-                            .1
-                            .get(selected.1.len() - 2)
+                if let InputState::DrawingPath(_, path) = &mut self.selected {
+                    if path.len() > 1
+                        && path
+                            .get(path.len() - 2)
                             .expect("Selected is not long enough???")
                             == &grid_pos
                     {
-                        selected.1.pop();
-                    } else if selected.1.last().expect("Path was empty?") != &grid_pos {
-                        selected.1.push(grid_pos);
+                        path.pop();
+                    } else if path.last().expect("Path was empty?") != &grid_pos {
+                        path.push(grid_pos);
                     }
                 }
                 dbg!(grid_pos);

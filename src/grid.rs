@@ -1,4 +1,7 @@
-use crate::{character::CharacterContainer, Wrapper};
+use crate::{
+    character::{CharacterContainer, CharacterType},
+    Wrapper,
+};
 use quicksilver::{geom::Rectangle, graphics::Color, Result as quickResult};
 use serde::Deserialize;
 use std::convert::TryFrom;
@@ -78,9 +81,15 @@ impl Grid {
 }
 
 #[derive(Deserialize)]
+pub struct ParseableCharacter {
+    pub x: i32,
+    pub y: i32,
+    pub char_type: CharacterType,
+}
+#[derive(Deserialize)]
 pub struct ParseableMap {
     pub tiles: Vec<String>,
-    pub characters: Vec<[i32; 2]>,
+    pub characters: Vec<ParseableCharacter>,
 }
 impl ParseableMap {
     pub fn parse(self) -> quickResult<(Grid, CharacterContainer)> {
