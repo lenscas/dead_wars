@@ -30,13 +30,15 @@
 		"wwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
 	],
 	"characters": [
-		[
-			10,
-			10
-		],
-		[
-			20,
-			20
-		]
+		{
+			"x": 10,
+			"y": 10,
+			"char_type": "Basic"
+		},
+		{
+			"x": 12,
+			"y": 12,
+			"char_type": "Basic"
+		}
 	]
 }
