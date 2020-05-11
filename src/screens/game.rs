@@ -1,6 +1,7 @@
 use super::screen::Screen;
 use crate::{
-    grid::{Grid, TILE_SIZE},
+    character::{Character, CharacterContainer},
+    grid::{Grid, ParseableMap, TILE_SIZE},
     Wrapper,
 };
 use async_trait::async_trait;
@@ -8,9 +9,13 @@ use quicksilver::{
     geom::{Rectangle, Transform, Vector},
     graphics::Color,
     lifecycle::{Key, MouseButton},
+    load_file,
     mint::Vector2,
 };
-use std::{collections::HashSet, convert::TryFrom};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Directions {
@@ -59,15 +64,24 @@ pub struct Game {
     pub moving: HashSet<Directions>,
     pub translate: Vector,
     pub grid: Grid,
-    pub selected: Option<Vec<Vector2<i32>>>,
+    pub selected: Option<(u64, Vec<Vector2<i32>>)>,
+    pub characters: CharacterContainer,
 }
 
 impl Game {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        let file = load_file("map.json")
+            .await
+            .expect("something has gone wrong");
+        let (grid, characters) = serde_json::from_slice::<ParseableMap>(&file)
+            .expect("couldn't parse")
+            .parse()
+            .expect("gone wrong");
         Self {
             moving: HashSet::new(),
             translate: Vector::new(0, 0),
-            grid: Grid::new(30, 30),
+            grid,
+            characters,
             selected: None,
         }
     }
@@ -89,7 +103,7 @@ impl Screen for Game {
     async fn draw(&mut self, wrapper: &mut crate::Wrapper<'_>) -> quicksilver::Result<()> {
         self.grid.draw(wrapper);
         if let Some(selected) = &self.selected {
-            for v in selected {
+            for v in &selected.1 {
                 wrapper.gfx.fill_rect(
                     &Rectangle::new(
                         Vector::new(v.x * TILE_SIZE, v.y * TILE_SIZE),
@@ -99,6 +113,7 @@ impl Screen for Game {
                 );
             }
         }
+        self.characters.draw(wrapper)?;
         Ok(())
     }
     async fn update(
@@ -118,11 +133,12 @@ impl Screen for Game {
         if self.translate != translate {
             let cursor_pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos);
             if let Some(selected) = &mut self.selected {
-                selected.push(cursor_pos);
+                selected.1.push(cursor_pos);
             }
         }
         self.translate = translate;
         wrapper.gfx.set_transform(Transform::translate(translate));
+        self.characters.update()?;
         Ok(None)
     }
     async fn event(
@@ -137,22 +153,39 @@ impl Screen for Game {
                         match &self.selected {
                             Some(x) => {
                                 dbg!(x);
-                                self.selected = None;
+                                let (id, path) = self.selected.take().unwrap();
+                                self.characters.move_character(id, path);
                             }
                             None => {
-                                self.selected = Some(vec![
-                                    self.cursor_pos_to_grid(wrapper.last_cursor_pos.clone())
-                                ])
+                                if self.characters.is_moving() {
+                                    return Ok(None);
+                                }
+                                let pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos.clone());
+                                if let Some(id) = self.characters.get_char_id_by_pos(pos) {
+                                    self.selected = Some((id, vec![pos]))
+                                }
                             }
                         }
                     }
+                } else if x.button() == MouseButton::Right && x.is_down() {
+                    self.selected = None;
                 }
             }
             quicksilver::lifecycle::Event::PointerMoved(x) => {
                 let loc = x.location();
                 let grid_pos = self.cursor_pos_to_grid(loc);
                 if let Some(selected) = &mut self.selected {
-                    selected.push(grid_pos);
+                    if selected.1.len() > 1
+                        && selected
+                            .1
+                            .get(selected.1.len() - 2)
+                            .expect("Selected is not long enough???")
+                            == &grid_pos
+                    {
+                        selected.1.pop();
+                    } else if selected.1.last().expect("Path was empty?") != &grid_pos {
+                        selected.1.push(grid_pos);
+                    }
                 }
                 dbg!(grid_pos);
             }

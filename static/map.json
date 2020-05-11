@@ -1,0 +1,42 @@
+{
+	"tiles": [
+		"wwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+		"wmmmmmmmmmmmmmmmmmmmmmmmmmmmmw",
+		"wmgggggggggggmmmmgggggggggggmw",
+		"wmrrrrrrrrgggmmmmgggrrrrrrrrmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrggmmmmmmggrgggggggmw",
+		"wmgggggggrgggmmmmgggrgggggggmw",
+		"wmgggggggrrrrrrrrrrrrgggggggmw",
+		"wmgggggggrgggmmmmgggrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmgggggggrgmmmwwmmmgrgggggggmw",
+		"wmrrrrrrrrgggmmmmgggrrrrrrrrmw",
+		"wmgggggggggggmmmmgggggggggggmw",
+		"wmmmmmmmmmmmmmmmmmmmmmmmmmmmmw",
+		"wwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	],
+	"characters": [
+		[
+			10,
+			10
+		],
+		[
+			20,
+			20
+		]
+	]
+}

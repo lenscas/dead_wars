@@ -1236,6 +1236,8 @@ dependencies = [
  "async-trait",
  "mergui",
  "quicksilver",
+ "serde 1.0.110",
+ "serde_json",
  "silver_animation",
 ]
 

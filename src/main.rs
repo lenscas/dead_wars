@@ -1,6 +1,7 @@
+use grid::TILE_SIZE;
 use mergui::Context;
 use quicksilver::{
-    geom::Vector,
+    geom::{Rectangle, Vector},
     graphics::{Color, Graphics},
     lifecycle::{run, EventStream, Settings, Window},
     mint::Vector2,
@@ -8,6 +9,7 @@ use quicksilver::{
 };
 use screens::{game::Game, screen::Screen};
 
+mod character;
 mod grid;
 mod screens;
 
@@ -24,6 +26,12 @@ impl<'a> Wrapper<'a> {
         Vector::new(x * res.x, y * res.y)
     }
 }
+pub fn grid_pos_to_rectangle(pos: Vector2<i32>) -> Rectangle {
+    Rectangle::new(
+        (pos.x * TILE_SIZE, pos.y * TILE_SIZE),
+        (TILE_SIZE, TILE_SIZE),
+    )
+}
 
 fn main() {
     run(
@@ -38,7 +46,7 @@ fn main() {
 
 async fn app(window: Window, gfx: Graphics, events: EventStream) -> Result<()> {
     let context = Context::new([0., 0.].into());
-    let mut screen = Game::new();
+    let mut screen = Game::new().await;
     let mut wrapper = Wrapper {
         window,
         gfx,
