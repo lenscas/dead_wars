@@ -131,7 +131,7 @@ impl Game {
         .into()
     }
     fn add_to_path(&mut self, grid_pos: Vector2<i32>) {
-        if let InputState::DrawingPath(_, path) = &mut self.selected {
+        if let InputState::DrawingPath(id, path) = &mut self.selected {
             if path.len() > 1
                 && path
                     .get(path.len() - 2)
@@ -144,6 +144,7 @@ impl Game {
                 if (last.x - grid_pos.x).abs() <= 1
                     && (last.y - grid_pos.y).abs() <= 1
                     && (last.x == grid_pos.x || last.y == grid_pos.y)
+                    && self.characters.can_take_path(*id, path, &self.grid)
                 {
                     if let None = self.characters.get_char_id_by_pos(grid_pos) {
                         path.push(grid_pos);
@@ -265,7 +266,9 @@ impl Screen for Game {
                                 }
                                 let pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos.clone());
                                 if let Some(id) = self.characters.get_char_id_by_pos(pos) {
-                                    self.selected = InputState::DrawingPath(id, vec![pos])
+                                    if self.characters.can_move(id) {
+                                        self.selected = InputState::DrawingPath(id, vec![pos])
+                                    }
                                 }
                             }
                             InputState::SelectingFight(_, _, targets) => {

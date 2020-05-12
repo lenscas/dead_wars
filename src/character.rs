@@ -1,4 +1,7 @@
-use crate::{grid::ParseableMap, grid_pos_to_rectangle, Wrapper};
+use crate::{
+    grid::{Grid, ParseableMap},
+    grid_pos_to_rectangle, Wrapper,
+};
 use quicksilver::{geom::Vector, graphics::Color, mint::Vector2, Result};
 use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
@@ -12,12 +15,18 @@ impl CharacterType {
             CharacterType::Basic => 3,
         }
     }
+    pub fn get_walk_range(&self) -> usize {
+        match self {
+            CharacterType::Basic => 5,
+        }
+    }
 }
 
 pub struct Character {
     pub position: Vector2<i32>,
     pub id: u64,
     pub char_type: CharacterType,
+    pub has_moved: bool,
 }
 impl Character {
     pub fn new(id: u64, position: Vector2<i32>, char_type: CharacterType) -> Self {
@@ -25,6 +34,7 @@ impl Character {
             position,
             id,
             char_type,
+            has_moved: false,
         }
     }
     pub fn draw(&self, wrapper: &mut Wrapper<'_>) -> Result<()> {
@@ -59,14 +69,29 @@ impl CharacterContainer {
         }
     }
 
+    pub fn can_take_path(&self, id: u64, path: &Vec<Vector2<i32>>, grid: &Grid) -> bool {
+        self.characters
+            .get(&id)
+            .expect("NO!")
+            .char_type
+            .get_walk_range()
+            >= path.len()
+    }
+
     pub fn finalize(&mut self) {
         self.last_move = None;
     }
-
+    pub fn can_move(&self, id: u64) -> bool {
+        self.characters
+            .get(&id)
+            .map(|v| !v.has_moved)
+            .unwrap_or(false)
+    }
     pub fn undo(&mut self) {
         if let Some((id, loc)) = self.last_move {
             if let Some(v) = self.characters.get_mut(&id) {
-                v.position = loc
+                v.position = loc;
+                v.has_moved = false;
             };
         }
         self.finalize();
@@ -106,13 +131,12 @@ impl CharacterContainer {
         if let Some(_) = &self.path {
             return;
         }
-        self.last_move = Some((
-            id,
-            self.characters
-                .get(&id)
-                .expect(&format!("id {} not found", id))
-                .position,
-        ));
+        let character = self
+            .characters
+            .get_mut(&id)
+            .expect(&format!("id {} not found", id));
+        character.has_moved = true;
+        self.last_move = Some((id, character.position));
         self.path = Some((id, path.into_iter().collect()))
     }
     pub fn is_moving(&self) -> bool {
