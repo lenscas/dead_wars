@@ -130,6 +130,28 @@ impl Game {
         ]
         .into()
     }
+    fn add_to_path(&mut self, grid_pos: Vector2<i32>) {
+        if let InputState::DrawingPath(_, path) = &mut self.selected {
+            if path.len() > 1
+                && path
+                    .get(path.len() - 2)
+                    .expect("Selected is not long enough???")
+                    == &grid_pos
+            {
+                path.pop();
+            } else if path.last().expect("Path was empty?") != &grid_pos {
+                let last = path.last().expect("...");
+                if (last.x - grid_pos.x).abs() <= 1
+                    && (last.y - grid_pos.y).abs() <= 1
+                    && (last.x == grid_pos.x || last.y == grid_pos.y)
+                {
+                    if let None = self.characters.get_char_id_by_pos(grid_pos) {
+                        path.push(grid_pos);
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[async_trait(?Send)]
@@ -178,9 +200,7 @@ impl Screen for Game {
         }
         if self.translate != translate {
             let cursor_pos = self.cursor_pos_to_grid(wrapper.last_cursor_pos);
-            if let InputState::DrawingPath(_, path) = &mut self.selected {
-                path.push(cursor_pos);
-            }
+            self.add_to_path(cursor_pos);
         }
         self.translate = translate;
         wrapper.gfx.set_transform(Transform::translate(translate));
@@ -270,18 +290,7 @@ impl Screen for Game {
             quicksilver::lifecycle::Event::PointerMoved(x) => {
                 let loc = x.location();
                 let grid_pos = self.cursor_pos_to_grid(loc);
-                if let InputState::DrawingPath(_, path) = &mut self.selected {
-                    if path.len() > 1
-                        && path
-                            .get(path.len() - 2)
-                            .expect("Selected is not long enough???")
-                            == &grid_pos
-                    {
-                        path.pop();
-                    } else if path.last().expect("Path was empty?") != &grid_pos {
-                        path.push(grid_pos);
-                    }
-                }
+                self.add_to_path(grid_pos);
             }
             quicksilver::lifecycle::Event::KeyboardInput(x) => {
                 if x.is_down() {

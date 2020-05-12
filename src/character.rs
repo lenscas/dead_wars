@@ -103,7 +103,7 @@ impl CharacterContainer {
             .map(|(v, _)| *v)
     }
     pub fn move_character(&mut self, id: u64, path: Vec<Vector2<i32>>) {
-        if let Some(x) = &self.path {
+        if let Some(_) = &self.path {
             return;
         }
         self.last_move = Some((
