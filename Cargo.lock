@@ -1281,8 +1281,6 @@ dependencies = [
 [[package]]
 name = "mergui"
 version = "0.1.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b6a4417acf5252bb8c43ca381dbd7a7fd8529e76657f07500c6149b5482df47"
 dependencies = [
  "indexmap",
  "quicksilver",

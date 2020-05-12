@@ -9,7 +9,7 @@ pub enum CharacterType {
 impl CharacterType {
     pub fn get_range(&self) -> i32 {
         match self {
-            CharacterType::Basic => 2,
+            CharacterType::Basic => 3,
         }
     }
 }
@@ -39,6 +39,7 @@ pub struct CharacterContainer {
     pub next_id: u64,
     pub characters: HashMap<u64, Character>,
     pub path: Option<(u64, VecDeque<Vector2<i32>>)>,
+    last_move: Option<(u64, Vector2<i32>)>,
 }
 impl CharacterContainer {
     pub fn new(map: &ParseableMap) -> Self {
@@ -54,7 +55,21 @@ impl CharacterContainer {
             characters,
             next_id,
             path: None,
+            last_move: None,
         }
+    }
+
+    pub fn finalize(&mut self) {
+        self.last_move = None;
+    }
+
+    pub fn undo(&mut self) {
+        if let Some((id, loc)) = self.last_move {
+            if let Some(v) = self.characters.get_mut(&id) {
+                v.position = loc
+            };
+        }
+        self.finalize();
     }
 
     pub fn get_char_ids_in_range_of(&self, id: u64) -> Vec<(u64, Vector2<i32>)> {
@@ -89,9 +104,15 @@ impl CharacterContainer {
     }
     pub fn move_character(&mut self, id: u64, path: Vec<Vector2<i32>>) {
         if let Some(x) = &self.path {
-            dbg!(x);
             return;
         }
+        self.last_move = Some((
+            id,
+            self.characters
+                .get(&id)
+                .expect(&format!("id {} not found", id))
+                .position,
+        ));
         self.path = Some((id, path.into_iter().collect()))
     }
     pub fn is_moving(&self) -> bool {

@@ -2,7 +2,9 @@ use super::screen::Screen;
 use crate::{
     character::CharacterContainer,
     grid::{Grid, ParseableMap, TILE_SIZE},
-    grid_pos_to_rectangle, Wrapper,
+    grid_pos_to_rectangle,
+    panel::{Panel, PanelConfig},
+    Wrapper,
 };
 use async_trait::async_trait;
 use quicksilver::{
@@ -56,10 +58,17 @@ impl TryFrom<Key> for Directions {
         }
     }
 }
+
+pub enum AfterMoveOptions {
+    Undo,
+    Fight,
+    Stay,
+}
 pub enum InputState {
     Normal,
     DrawingPath(u64, Vec<Vector2<i32>>),
-    WaitingForFight(u64, Vector2<i32>),
+    WaitingForCharacterMovement(u64, Vector2<i32>),
+    SelectingActionAfterMove(Panel<AfterMoveOptions>, u64, Vector2<i32>),
     SelectingFight(u64, Vector2<i32>, Vec<(u64, Vector2<i32>)>),
 }
 
@@ -70,7 +79,10 @@ impl InputState {
                 let id = *id;
                 let last_place = path.last().unwrap().clone();
                 drop(path);
-                let old = std::mem::replace(self, InputState::WaitingForFight(id, last_place));
+                let old = std::mem::replace(
+                    self,
+                    InputState::WaitingForCharacterMovement(id, last_place),
+                );
                 if let InputState::DrawingPath(id, path) = old {
                     Ok((id, path))
                 } else {
@@ -136,12 +148,16 @@ impl Screen for Game {
             }
         }
         self.characters.draw(wrapper)?;
-        if let InputState::SelectingFight(_, _, targets) = &self.selected {
-            for (_, target) in targets {
-                wrapper
-                    .gfx
-                    .fill_rect(&grid_pos_to_rectangle(target.clone()), Color::ORANGE);
+        match &self.selected {
+            InputState::SelectingFight(_, _, targets) => {
+                for (_, target) in targets {
+                    wrapper
+                        .gfx
+                        .fill_rect(&grid_pos_to_rectangle(target.clone()), Color::ORANGE);
+                }
             }
+            InputState::SelectingActionAfterMove(x, _, _) => x.draw(self.translate, wrapper)?,
+            _ => {}
         }
 
         Ok(())
@@ -169,12 +185,25 @@ impl Screen for Game {
         self.translate = translate;
         wrapper.gfx.set_transform(Transform::translate(translate));
         if self.characters.update()? {
-            if let InputState::WaitingForFight(id, at) = self.selected {
-                let in_range = self.characters.get_char_ids_in_range_of(id);
-                self.selected = InputState::SelectingFight(id, at, in_range);
+            if let InputState::WaitingForCharacterMovement(id, at) = self.selected {
+                self.selected = InputState::SelectingActionAfterMove(
+                    Panel::new(PanelConfig {
+                        options: vec![
+                            ("Fight".into(), AfterMoveOptions::Fight),
+                            ("Stay".into(), AfterMoveOptions::Stay),
+                            ("Undo".into(), AfterMoveOptions::Undo),
+                        ],
+                        font: wrapper.get_font(20.).await?,
+                        top_left: Vector::new(10., 20.),
+                        width: 50.,
+                        background: wrapper.get_image("pixel.png".into()).await?,
+                        text_size: 30.,
+                    }),
+                    id,
+                    at,
+                );
             }
         }
-
         Ok(None)
     }
     async fn event(
@@ -182,13 +211,31 @@ impl Screen for Game {
         wrapper: &mut Wrapper<'_>,
         event: &quicksilver::lifecycle::Event,
     ) -> quicksilver::Result<Option<Box<dyn Screen>>> {
+        if let InputState::SelectingActionAfterMove(panel, id, location) = &mut self.selected {
+            if let Some(chosen) = panel.event(wrapper, event) {
+                match chosen {
+                    AfterMoveOptions::Undo => {
+                        self.characters.undo();
+                        self.selected = InputState::Normal;
+                    }
+                    AfterMoveOptions::Fight => {
+                        let in_range = self.characters.get_char_ids_in_range_of(*id);
+                        self.selected = InputState::SelectingFight(*id, *location, in_range);
+                    }
+                    AfterMoveOptions::Stay => {
+                        self.selected = InputState::Normal;
+                        self.characters.finalize();
+                    }
+                }
+                return Ok(None);
+            }
+        }
         match event {
             quicksilver::lifecycle::Event::PointerInput(x) => {
                 if x.button() == MouseButton::Left {
                     if x.is_down() {
                         match &self.selected {
                             InputState::DrawingPath(_, _) => {
-                                dbg!(x);
                                 let (id, path) = self.selected.to_waiting_for_fight().unwrap();
                                 self.characters.move_character(id, path);
                             }
@@ -217,6 +264,7 @@ impl Screen for Game {
                     }
                 } else if x.button() == MouseButton::Right && x.is_down() {
                     self.selected = InputState::Normal;
+                    self.characters.undo();
                 }
             }
             quicksilver::lifecycle::Event::PointerMoved(x) => {
@@ -234,7 +282,6 @@ impl Screen for Game {
                         path.push(grid_pos);
                     }
                 }
-                dbg!(grid_pos);
             }
             quicksilver::lifecycle::Event::KeyboardInput(x) => {
                 if x.is_down() {
